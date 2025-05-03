@@ -251,7 +251,6 @@ useEffect(() => {
                              isActive={index === activeIndex}
                              onSwipeComplete={(direction) => completeSwipe(card.id, direction)}
                              supabase={supabase} // Pass supabase client
-                             isVisible={index >= activeIndex - 2 && index <= activeIndex + 2}
                          />
                      );
                  })}
@@ -267,128 +266,92 @@ useEffect(() => {
 }
 
 
-// --- Reusable Card Component (Updated with Memoized URL and Error Handling) ---
+// --- Reusable Card Component (Updated for Fit-Width Scaling) ---
 interface CardProps {
     cardData: ImageCardData;
     isActive: boolean;
     onSwipeComplete: (direction: 'left' | 'right') => void;
     supabase: SupabaseClient; // Receive Supabase client as prop
-    style?: React.CSSProperties;
-    isVisible: boolean;
 }
 
-const Card: React.FC<CardProps> = ({ cardData, isActive, onSwipeComplete, supabase, style, isVisible }) => {
-    const x = useMotionValue(0);
-    const rotate = useTransform(x, [-200, 0, 200], [-25, 0, 25], { clamp: false });
+const Card: React.FC<CardProps> = ({ cardData, isActive, onSwipeComplete, supabase }) => {
+    const x = useMotionValue(0); // Motion value for horizontal drag
 
-    // --- State for Image Loading Error ---
-    const [imageError, setImageError] = useState(false);
+    // Calculate rotation based on x offset
+    const rotate = useTransform(
+        x,
+        [-200, 0, 200], // Input range (pixels)
+        [-25, 0, 25], // Output range (degrees)
+        { clamp: false }
+    );
 
-    // --- Memoize Image URL Generation ---
-    // This prevents calling getPublicUrl on every single render
-    const imageUrl = useMemo(() => {
-        // Reset error state when card data (specifically path) changes
-        setImageError(false);
-        if (!cardData.storage_path) {
-            console.error("Card received without storage_path:", cardData);
-            setImageError(true); // Mark as error if path is missing
-            return null;
-        }
-        console.log(`Generating public URL for: ${cardData.storage_path}`);
-        try {
-            const { data: imageUrlData } = supabase.storage
-                .from('house-images') // <-- !!! REPLACE with your actual bucket name !!!
-                .getPublicUrl(cardData.storage_path);
-
-            if (!imageUrlData?.publicUrl) {
-                 console.warn(`getPublicUrl returned null/undefined for ${cardData.storage_path}`);
-                 // Consider setting imageError = true here if null URL is an error condition
-            }
-            return imageUrlData?.publicUrl ?? null; // Ensure null if undefined
-        } catch (e) {
-            console.error("Error calling getPublicUrl:", e);
-            setImageError(true); // Set error if the sync call itself fails
-            return null;
-        }
-    // Dependency: Recalculate only if storage_path or supabase client changes
-    }, [cardData.storage_path, supabase]);
-
-
-    // --- Image Error Handler ---
-    const handleImageError = useCallback(() => {
-        // This function is called by the <img> tag's onError event
-        console.error(`Failed to load image from src: ${imageUrl} (Path: ${cardData.storage_path})`);
-        setImageError(true); // Set state to indicate error
-    }, [imageUrl, cardData.storage_path]); // Dependencies for the error handler
-
-
-    // --- Swipe Animation Trigger ---
-    const triggerSwipeAnimation = useCallback((direction: 'left' | 'right') => {
-        const flyToX = direction === 'left' ? -450 : 450;
+    // Function to trigger the swipe animation and callback
+    const triggerSwipeAnimation = (direction: 'left' | 'right') => {
+        const flyToX = direction === 'left' ? -450 : 450; // Fly off-screen distance
         animate(x, flyToX, { duration: CARD_FLY_OUT_DURATION, ease: "easeOut" })
             .then(() => {
                  requestAnimationFrame(() => {
                     onSwipeComplete(direction);
                  });
             });
-    }, [x, onSwipeComplete]);
+    };
 
-
-    // --- Drag End Handler ---
-    const handleDragEnd = useCallback((event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    // Drag end handler
+    const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         const { offset, velocity } = info;
+        console.log(`DragEnd: offset.x=${offset.x}, velocity.x=${velocity.x}`);
+
         if (Math.abs(offset.x) > SWIPE_THRESHOLD || Math.abs(velocity.x) > 200) {
             const direction = offset.x > 0 ? 'right' : 'left';
             triggerSwipeAnimation(direction);
         } else {
             animate(x, 0, { type: "spring", stiffness: 300, damping: 30 });
         }
-    }, [x, triggerSwipeAnimation]);
+    };
 
+    // Get Image URL - IMPORTANT: Replace 'your-bucket-name'
+    const { data: imageUrlData } = supabase.storage
+        .from('house-images') // <-- !!! REPLACE with your actual bucket name !!!
+        .getPublicUrl(cardData.storage_path);
+    const imageUrl = imageUrlData?.publicUrl;
 
-    // Don't render if it's already swiped past
-    if (!isVisible) return null;
 
     return (
         <motion.div
-            className="absolute w-full h-full rounded-xl shadow-lg overflow-hidden cursor-grab bg-white border border-gray-200"
+            className="absolute w-full h-full rounded-xl shadow-lg overflow-hidden cursor-grab bg-white border border-gray-200" // Card container styles
             style={{
-                ...style, // Apply zIndex etc.
                 x,
                 rotate,
+                zIndex: isActive ? 10 : 1,
+                // Apply scale/offset for stack effect
                 scale: isActive ? 1 : 0.95,
                 y: isActive ? 0 : 10,
-                opacity: isActive ? 1 : 1,
-                transition: 'transform 0.3s ease-out, opacity 0.3s ease-out',
+                transition: 'transform 0.3s ease-out', // Smooth transition for stack effect
             }}
-            drag={isActive ? "x" : false}
+            drag={isActive ? "x" : false} // Only drag active card
             dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            onDragEnd={isActive ? handleDragEnd : undefined}
+            onDragEnd={handleDragEnd}
         >
-            {/* Image container - Centers content */}
-            <div className="relative w-full h-full flex items-center justify-center">
-                {/* Conditional Rendering based on URL and Error State */}
-                {imageUrl && !imageError ? (
+             {/* Image container - Uses Flexbox to center the image vertically */}
+            <div className="relative w-full h-full flex items-center justify-center"> {/* Added flex utilities */}
+                {imageUrl ? (
                     <img
                         src={imageUrl}
                         alt={cardData.description || 'Architectural image'}
+                        // --- UPDATED IMAGE STYLING ---
                         className="block w-full h-auto max-h-full pointer-events-none"
+                        // w-full: Make image width match container
+                        // h-auto: Let height adjust based on aspect ratio
+                        // block: Prevents extra space sometimes added below inline images
+                        // max-h-full: Prevent image exceeding card height
+                        // pointer-events-none: Prevents image interfering with drag events
+                        // --- END UPDATED IMAGE STYLING ---
                         draggable="false"
-                        onError={handleImageError} // Attach the error handler here
                     />
                 ) : (
-                    // Show specific error or loading state
-                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 bg-gray-100 p-4 text-center">
-                        {imageError ? (
-                            <>
-                               <p className="text-red-500 font-semibold text-sm">Image Error</p>
-                               <p className="text-xs mt-1">Could not load image.</p>
-                               {/* Optional: Log path for debugging */}
-                               {/* <p className="text-xs mt-1 text-gray-400 break-all">{cardData.storage_path}</p> */}
-                            </>
-                        ) : (
-                            <p>Loading image...</p> // This shows if URL is null/undefined initially
-                        )}
+                    // Keep placeholder centered as well
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        <p>Loading image...</p>
                     </div>
                 )}
             </div>
