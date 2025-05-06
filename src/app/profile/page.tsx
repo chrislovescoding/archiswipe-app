@@ -238,7 +238,7 @@ export default function ProfilePage() {
                     const style_counts: Record<string, number> = {};
                     liked_images_with_styles?.forEach(img => {
                         // Access the style name directly from the style object
-                        const style_name = img.styles?.name; // <-- REMOVED [0]
+                        const style_name = img.styles?.name;
                         if (style_name) {
                             style_counts[style_name] = (style_counts[style_name] || 0) + 1;
                         }
@@ -275,7 +275,7 @@ export default function ProfilePage() {
                 // Format data for display
                 const formatted_recent_activities = recent_swipes_data?.map(swipe => {
                     // Access the image object directly
-                    const image_data = swipe.images; // <-- REMOVED [0]
+                    const image_data = swipe.images;
                 
                     const full_path = image_data?.storage_path ?? ''; // This line was already okay
                     const file_name_with_ext = full_path.split('/').pop() ?? 'Unknown Image';
@@ -284,7 +284,7 @@ export default function ProfilePage() {
                         : file_name_with_ext;
                 
                     // Access the style name directly from the nested style object
-                    const style_name = image_data?.styles?.name ?? 'Unknown Style'; // <-- REMOVED [0]
+                    const style_name = image_data?.styles?.name ?? 'Unknown Style';
                 
                     return {
                         id: swipe.id,
