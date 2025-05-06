@@ -4,11 +4,84 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-// CORRECTED IMPORT: Aliased Home icon to HomeIcon
-import { Heart, Home as HomeIcon, Compass, MessageSquare, Users, CheckCircle, BarChart2, Star } from 'lucide-react'; 
+import {
+  Heart as HeartIconLucide,
+  Home as HomeIcon,
+  Compass,
+  Users,
+  CheckCircle,
+  BarChart2,
+  Star,
+  X as XIcon,
+} from 'lucide-react';
+
+// --- Constants for Mockup Images ---
+const MOCKUP_IMAGE_URL_TOP = "https://waunizuiwfmcuxnlrncs.supabase.co/storage/v1/object/public/house-images/mockup-assets/stylised-building-1.png";
+const MOCKUP_IMAGE_URL_BOTTOM = "https://waunizuiwfmcuxnlrncs.supabase.co/storage/v1/object/public/house-images/mockup-assets/stylised-building-2.png";
+
+// --- Updated MockupCard Component ---
+const MockupCard = ({
+  imageUrl,
+  isTopCard = false,
+  showLikeOverlay = false,
+  zIndex,
+}: {
+  imageUrl: string;
+  isTopCard?: boolean;
+  showLikeOverlay?: boolean;
+  zIndex: number;
+}) => {
+  const cardShellStyle = `absolute left-1/2 top-1/2 
+                         w-[85%] aspect-[9/14] 
+                         rounded-xl shadow-lg overflow-hidden 
+                         bg-white border border-gray-200`; // Card background is white
+
+  // Transformations for stacking and swipe effect
+  // MODIFIED: Adjusted scales for more consistent perceived base size
+  const baseScale = 0.97; // Apply a slight base scale down to both for a bit of inset feel
+  const transformEffect = isTopCard
+    ? { transform: `translateX(65px) translateY(-5px) rotate(12deg) translateZ(0px) scale(${baseScale})` } 
+    : { transform: `translateX(0px) translateY(5px) rotate(0deg) translateZ(0px) scale(${baseScale * 0.92})` }; // Bottom card scaled relative to top
+
+  return (
+    <div
+      className={cardShellStyle}
+      style={{
+        transform: `translate(-50%, -50%) ${transformEffect.transform}`,
+        zIndex,
+        WebkitTransform: `translate(-50%, -50%) ${transformEffect.transform}`,
+      }}
+    >
+      <div className="w-full h-full flex items-center justify-center overflow-hidden">
+        <img
+          src={imageUrl}
+          alt="Architectural mockup"
+          className="block w-full h-auto max-h-full pointer-events-none"
+          draggable="false"
+        />
+      </div>
+
+      {/* Overlay for the "like" indication. bg-black/10 causes a dimming/greyish effect. */}
+      {showLikeOverlay && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none"> 
+          <div className="p-3 bg-black/20 rounded-full flex items-center justify-center">
+            <div className="w-16 h-16 flex items-center justify-center bg-pink-500/90 rounded-full shadow-2xl border-2 border-pink-300">
+              <HeartIconLucide className="h-8 w-8 text-white" fill="currentColor" strokeWidth={2} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+// Simple Heart component for background decoration
+const Heart = ({ className = '' }: { className?: string }) => (
+  <div className={`absolute text-[rgb(var(--primary-rgb))] ${className}`}>❤️</div>
+);
 
 // Helper component for feature cards
 const FeatureCard = ({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) => (
@@ -28,7 +101,7 @@ const TestimonialCard = ({ avatarInitials, name, role, quote }: { avatarInitials
       “
     </div>
     <div className="flex items-center mb-6 mt-6">
-      <div className="w-14 h-14 bg-[rgb(var(--primary-light-rgb))] rounded-full mr-4 flex items-center justify-center text-[rgb(var(--primary-rgb))] font-bold text-xl">
+      <div className="w-14 h-14 bg-[rgba(var(--primary-light-rgb),0.4)] rounded-full mr-4 flex items-center justify-center text-[rgb(var(--primary-rgb))] font-bold text-xl">
         {avatarInitials}
       </div>
       <div>
@@ -41,17 +114,16 @@ const TestimonialCard = ({ avatarInitials, name, role, quote }: { avatarInitials
 );
 
 
-export default function Home() { // This is the page component
+export default function Home() {
   const router = useRouter();
   const { session, isLoading: isLoadingAuth } = useAuth();
 
   const navLinkBase = "px-4 py-2 rounded-full font-medium smooth-transition text-sm shadow-sm hover:shadow-md";
+  const navLinkSecondary = `${navLinkBase} bg-white text-[rgb(var(--primary-text-soft-rgb))] border border-[rgba(var(--primary-light-rgb),0.5)] hover:bg-[rgba(var(--primary-light-rgb),0.2)]`;
   const navLinkPrimary = `${navLinkBase} bg-[rgb(var(--primary-rgb))] text-white hover:bg-[rgb(var(--primary-hover-rgb))]`;
-  const navLinkSecondary = `${navLinkBase} bg-white text-[rgb(var(--primary-rgb))] border border-[rgb(var(--primary-light-rgb))] hover:bg-[rgba(var(--primary-light-rgb),0.3)]`;
 
   const mainButtonClass = "px-8 py-3 bg-[rgb(var(--primary-rgb))] text-white rounded-full hover:bg-[rgb(var(--primary-hover-rgb))] font-semibold shadow-lg text-lg smooth-transition transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[rgb(var(--primary-rgb))] flex items-center justify-center space-x-2";
 
-  // Variants for Framer Motion
   const fadeIn = {
     hidden: { opacity: 0, y: 20 },
     visible: (delay: number = 0) => ({
@@ -63,10 +135,18 @@ export default function Home() { // This is the page component
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-fuchsia-50 text-slate-700">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-50">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-80">
         <div className="absolute top-20 left-10 w-64 h-64 rounded-full bg-pink-200/30 blur-3xl animate-pulse-slow"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 rounded-full bg-rose-300/30 blur-3xl animate-pulse-slow animation-delay-2000"></div>
         <div className="absolute top-1/3 right-1/4 w-48 h-48 rounded-full bg-fuchsia-400/20 blur-3xl animate-pulse-slow animation-delay-4000"></div>
+        <Heart className="top-16 left-1/4 text-6xl opacity-20 -rotate-12 animate-pulse-slow animation-delay-2000" />
+        <Heart className="top-1/3 right-12 text-8xl opacity-15 rotate-[25deg] animate-pulse-slow" />
+        <Heart className="top-3/4 left-10 text-5xl opacity-25 rotate-6 animate-pulse-slow animation-delay-4000" />
+        <Heart className="bottom-10 right-1/3 text-7xl opacity-20 -rotate-[15deg] animate-pulse-slow" />
+        <Heart className="bottom-1/2 left-1/2 text-4xl opacity-30 rotate-[5deg] animate-pulse-slow animation-delay-2000" />
+        <Heart className="bottom-1/4 right-16 text-6xl opacity-10 rotate-[30deg] animate-pulse-slow" />
+        <Heart className="top-10 right-10 text-5xl opacity-20 rotate-[10deg] animate-pulse-slow animation-delay-4000" />
+        <Heart className="left-5 top-2/3 text-7xl opacity-15 -rotate-[20deg] animate-pulse-slow" />
       </div>
 
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md shadow-sm">
@@ -99,60 +179,77 @@ export default function Home() { // This is the page component
         <div className="container mx-auto">
           <motion.h1
             variants={fadeIn} initial="hidden" animate="visible" custom={0}
-            className="text-5xl md:text-7xl font-extrabold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-pink-600 via-rose-500 to-fuchsia-600"
+            className="text-5xl md:text-7xl font-extrabold mb-6 text-[rgb(var(--primary-rgb))]"
           >
             Swipe Right on Architecture
           </motion.h1>
           <motion.p
              variants={fadeIn} initial="hidden" animate="visible" custom={0.2}
-            className="text-xl md:text-2xl text-slate-600 mb-10 max-w-2xl mx-auto"
+            className="text-xl md:text-2xl text-slate-700 mb-10 max-w-2xl mx-auto"
           >
             Because relationships end, but Gothic columns are forever. Find your structural soulmate.
           </motion.p>
 
-          <motion.div  variants={fadeIn} initial="hidden" animate="visible" custom={0.4}>
+          <motion.div
+            variants={fadeIn} initial="hidden" animate="visible" custom={0.4}
+            className="flex justify-center"
+          >
             <button onClick={() => router.push('/swipe')} className={mainButtonClass}>
               <span>Discover Your Style</span>
               <Compass size={22} />
             </button>
           </motion.div>
 
-           <motion.div 
+           {/* --- Updated Phone Mockup --- */}
+           <motion.div
             variants={fadeIn} initial="hidden" animate="visible" custom={0.6}
-            className="relative max-w-xs mx-auto mt-16 md:mt-24 group">
+            className="relative max-w-xs w-full mx-auto mt-16 md:mt-24 group"
+            >
              <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-fuchsia-500 rounded-3xl blur opacity-50 group-hover:opacity-75 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
-             <div className="relative rounded-3xl overflow-hidden border-8 border-slate-800 shadow-2xl bg-slate-700">
-               <div className="aspect-[9/16] bg-gray-100 relative">
-                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2/5 h-6 bg-slate-800 rounded-b-lg z-10"></div>
-                 <div className="absolute inset-0 flex items-center justify-center p-2">
-                   <div className="w-full h-full bg-white shadow-lg rounded-lg overflow-hidden relative flex flex-col">
-                      <Image src="/placeholder-arch.jpg" alt="Architecture Example" width={300} height={400} className="object-cover h-3/4 w-full"/>
-                     <div className="p-3 bg-white border-t border-gray-200 flex-grow">
-                       <p className="font-bold text-slate-800 text-sm">Brutalist Beauty, 60</p>
-                       <p className="text-xs text-slate-600">Loves: Concrete, Sharp Edges</p>
-                     </div>
-                     <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-6 p-2">
-                        <div className="w-10 h-10 rounded-full bg-red-100 border-2 border-red-300 text-red-500 flex items-center justify-center shadow-md">
-                           {/* CORRECTED USAGE: HomeIcon */}
-                           <HomeIcon size={20} strokeWidth={2.5}/> 
-                         </div>
-                         <div className="w-12 h-12 rounded-full bg-pink-100 border-2 border-pink-300 text-pink-600 flex items-center justify-center shadow-lg transform scale-110">
-                           <Heart size={24} strokeWidth={2.5} fill="currentColor"/>
-                         </div>
-                     </div>
+             {/* Phone Frame */}
+             <div className="relative rounded-[36px] overflow-hidden border-4 border-slate-900 shadow-2xl bg-slate-900 p-1.5">
+               {/* Screen Area */}
+               <div className="aspect-[9/16] bg-white rounded-[28px] relative overflow-hidden flex flex-col">
+                 {/* Notch */}
+                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-5 bg-slate-900 rounded-b-lg z-30"></div>
+
+                 {/* Card Stack Area */}
+                 <div className="relative flex-grow flex items-center justify-center pt-5 pb-2 mt-3">
+                   <MockupCard
+                     imageUrl={MOCKUP_IMAGE_URL_BOTTOM}
+                     zIndex={5}
+                   />
+                   <MockupCard
+                     imageUrl={MOCKUP_IMAGE_URL_TOP}
+                     isTopCard={true}
+                     showLikeOverlay={true}
+                     zIndex={10}
+                   />
+                 </div>
+
+                 {/* Action Buttons Area */}
+                 <div className="p-4 bg-white border-t border-gray-100 z-20 shrink-0">
+                   <div className="flex justify-center space-x-8">
+                      <button aria-label="Nope" className="w-14 h-14 rounded-full bg-red-100 border-2 border-red-200 text-red-500 flex items-center justify-center shadow-md hover:bg-red-200 smooth-transition">
+                        <XIcon size={28} strokeWidth={2.5}/>
+                      </button>
+                      <button aria-label="Like" className="w-16 h-16 rounded-full bg-[rgb(var(--primary-rgb))] text-white flex items-center justify-center shadow-lg hover:bg-[rgb(var(--primary-hover-rgb))] smooth-transition transform hover:scale-110">
+                        <HeartIconLucide size={30} strokeWidth={2} fill="currentColor"/>
+                      </button>
                    </div>
                  </div>
                </div>
              </div>
            </motion.div>
+           {/* --- End Phone Mockup --- */}
         </div>
       </section>
 
       <section className="py-16 md:py-24 bg-white/70 backdrop-blur-sm relative z-10">
        <div className="container mx-auto px-4">
-         <motion.h2  variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}
+         <motion.h2 variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
           className="text-3xl md:text-4xl font-bold text-center mb-6 text-slate-800">Find Your Perfect Architectural Match</motion.h2>
-         <motion.p  variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0.2}
+         <motion.p variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0.2}
           className="text-center text-[rgb(var(--primary-rgb))] mb-12 md:mb-16 text-lg italic">Form follows function, but love follows swipes.</motion.p>
          <div className="grid md:grid-cols-3 gap-8">
            <motion.div variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0.3}>
@@ -173,9 +270,8 @@ export default function Home() { // This is the page component
          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
            {[
              { icon: <BarChart2 size={32} className="mx-auto mb-2 opacity-80"/>, value: "5M+", label: "Daily Swipes" },
-             // CORRECTED USAGE: HomeIcon
              { icon: <HomeIcon size={32} className="mx-auto mb-2 opacity-80"/>, value: "22+", label: "Architectural Styles" },
-             { icon: <Heart size={32} className="mx-auto mb-2 opacity-80"/>, value: "92%", label: "Match Success" },
+             { icon: <HeartIconLucide size={32} className="mx-auto mb-2 opacity-80"/>, value: "92%", label: "Match Success" },
              { icon: <Star size={32} className="mx-auto mb-2 opacity-80"/>, value: "4.8★", label: "User Rating" }
            ].map((stat, index) => (
              <motion.div key={stat.label} variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={index * 0.1}>
@@ -190,7 +286,7 @@ export default function Home() { // This is the page component
 
       <section className="py-16 md:py-24 bg-pink-50 relative z-10">
        <div className="container mx-auto px-4">
-         <motion.h2 variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}
+         <motion.h2 variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
           className="text-3xl md:text-4xl font-bold text-center mb-6 text-slate-800">What Our Users Say</motion.h2>
          <motion.p variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0.2}
           className="text-center text-[rgb(var(--primary-rgb))] mb-12 md:mb-16 text-lg italic">Real reviews from real architecture enthusiasts</motion.p>
@@ -207,7 +303,7 @@ export default function Home() { // This is the page component
 
       <section className="py-16 md:py-24 bg-slate-800 text-white text-center relative z-10">
        <div className="container mx-auto px-4">
-         <motion.h2 variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }}
+         <motion.h2 variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0}
           className="text-3xl md:text-4xl font-bold mb-6">Ready to Find Your Architectural Soulmate?</motion.h2>
          <motion.p variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0.2}
           className="text-xl mb-10 text-slate-300 max-w-xl mx-auto">Join thousands of architecture enthusiasts who've found their perfect style match.</motion.p>

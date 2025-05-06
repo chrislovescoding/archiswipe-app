@@ -1,3 +1,4 @@
+/* src/app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,19 +6,39 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* ArchiSwipe Theme Colors (Pink/Rose Theme) */
+  --primary-rgb: 236 72 153; /* Equivalent to pink-500 (EC4899) */
+  --primary-light-rgb: 251 146 198; /* Equivalent to pink-300 (FB92C6) */
+  --primary-hover-rgb: 219 39 119; /* Equivalent to pink-600 (DB2777) */
+  --text-muted-rgb: 100 116 139; /* Equivalent to slate-500 */
+  --card-border-rgb: 226 232 240; /* Equivalent to slate-200 */
+  
+  /* NEW: Softer pink for text, closer to pink-400 */
+  --primary-text-soft-rgb: 244 114 182; /* Equivalent to pink-400 (F472B6) */
 }
+
+/* ... rest of your globals.css ... */
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    /* Dark Mode ArchiSwipe Theme Colors */
+    --primary-rgb: 244 114 182; /* pink-400 for better visibility on dark */
+    --primary-light-rgb: 251 146 198; /* pink-300 (might need adjustment) */
+    --primary-hover-rgb: 236 72 153; /* pink-500 for hover on dark */
+    --text-muted-rgb: 156 163 175; /* slate-400 for dark mode */
+    --card-border-rgb: 51 65 85; /* slate-700 for dark mode */
+    --primary-text-soft-rgb: 249 168 212; /* pink-300 for dark mode soft text (F9A8D4) */
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, Helvetica, sans-serif; /* Note: This is overridden by Inter font in layout.tsx */
 }
 
 @layer utilities {
