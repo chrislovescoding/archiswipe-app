@@ -36,14 +36,12 @@ const MockupCard = ({
   const cardShellStyle = `absolute left-1/2 top-1/2 
                          w-[85%] aspect-[9/14] 
                          rounded-xl shadow-lg overflow-hidden 
-                         bg-white border border-gray-200`; // Card background is white
+                         bg-white border border-gray-200`; 
 
-  // Transformations for stacking and swipe effect
-  // MODIFIED: Adjusted scales for more consistent perceived base size
-  const baseScale = 0.97; // Apply a slight base scale down to both for a bit of inset feel
+  const baseScale = 0.97; 
   const transformEffect = isTopCard
     ? { transform: `translateX(65px) translateY(-5px) rotate(12deg) translateZ(0px) scale(${baseScale})` } 
-    : { transform: `translateX(0px) translateY(5px) rotate(0deg) translateZ(0px) scale(${baseScale * 0.92})` }; // Bottom card scaled relative to top
+    : { transform: `translateX(0px) translateY(5px) rotate(0deg) translateZ(0px) scale(${baseScale})` };
 
   return (
     <div
@@ -62,10 +60,8 @@ const MockupCard = ({
           draggable="false"
         />
       </div>
-
-      {/* Overlay for the "like" indication. bg-black/10 causes a dimming/greyish effect. */}
       {showLikeOverlay && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none"> 
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"> 
           <div className="p-3 bg-black/20 rounded-full flex items-center justify-center">
             <div className="w-16 h-16 flex items-center justify-center bg-pink-500/90 rounded-full shadow-2xl border-2 border-pink-300">
               <HeartIconLucide className="h-8 w-8 text-white" fill="currentColor" strokeWidth={2} />
@@ -200,20 +196,15 @@ export default function Home() {
             </button>
           </motion.div>
 
-           {/* --- Updated Phone Mockup --- */}
+           {/* --- Phone Mockup --- */}
            <motion.div
             variants={fadeIn} initial="hidden" animate="visible" custom={0.6}
             className="relative max-w-xs w-full mx-auto mt-16 md:mt-24 group"
             >
              <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-fuchsia-500 rounded-3xl blur opacity-50 group-hover:opacity-75 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
-             {/* Phone Frame */}
              <div className="relative rounded-[36px] overflow-hidden border-4 border-slate-900 shadow-2xl bg-slate-900 p-1.5">
-               {/* Screen Area */}
                <div className="aspect-[9/16] bg-white rounded-[28px] relative overflow-hidden flex flex-col">
-                 {/* Notch */}
                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/3 h-5 bg-slate-900 rounded-b-lg z-30"></div>
-
-                 {/* Card Stack Area */}
                  <div className="relative flex-grow flex items-center justify-center pt-5 pb-2 mt-3">
                    <MockupCard
                      imageUrl={MOCKUP_IMAGE_URL_BOTTOM}
@@ -226,15 +217,21 @@ export default function Home() {
                      zIndex={10}
                    />
                  </div>
-
-                 {/* Action Buttons Area */}
+                 {/* MODIFIED Action Buttons Area */}
                  <div className="p-4 bg-white border-t border-gray-100 z-20 shrink-0">
                    <div className="flex justify-center space-x-8">
-                      <button aria-label="Nope" className="w-14 h-14 rounded-full bg-red-100 border-2 border-red-200 text-red-500 flex items-center justify-center shadow-md hover:bg-red-200 smooth-transition">
-                        <XIcon size={28} strokeWidth={2.5}/>
+                      <button 
+                        aria-label="Nope" 
+                        className="w-14 h-14 rounded-full bg-red-500 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+                      >
+                        <XIcon size={28} strokeWidth={2}/> {/* Adjusted size/stroke for consistency with image */}
                       </button>
-                      <button aria-label="Like" className="w-16 h-16 rounded-full bg-[rgb(var(--primary-rgb))] text-white flex items-center justify-center shadow-lg hover:bg-[rgb(var(--primary-hover-rgb))] smooth-transition transform hover:scale-110">
-                        <HeartIconLucide size={30} strokeWidth={2} fill="currentColor"/>
+                      <button 
+                        aria-label="Like" 
+                        className="w-14 h-14 rounded-full bg-pink-500 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+                      >
+                        {/* HeartIconLucide size 28, strokeWidth 2, NO fill makes it an outline */}
+                        <HeartIconLucide size={28} strokeWidth={2} /> 
                       </button>
                    </div>
                  </div>
@@ -307,12 +304,30 @@ export default function Home() {
           className="text-3xl md:text-4xl font-bold mb-6">Ready to Find Your Architectural Soulmate?</motion.h2>
          <motion.p variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0.2}
           className="text-xl mb-10 text-slate-300 max-w-xl mx-auto">Join thousands of architecture enthusiasts who've found their perfect style match.</motion.p>
+         
          <motion.div variants={fadeIn} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0.4}
           className="flex flex-col sm:flex-row gap-4 justify-center">
-           <button onClick={() => router.push('/auth')} className={`${mainButtonClass} bg-white text-slate-800 hover:bg-gray-100`}>
+           <button 
+             onClick={() => router.push('/auth')} 
+             className="
+               px-8 py-3 
+               bg-white text-black 
+               rounded-full 
+               font-semibold 
+               shadow-lg 
+               text-lg 
+               smooth-transition 
+               transform hover:scale-105 hover:bg-gray-200
+               focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500
+               flex items-center justify-center space-x-2
+             "
+           >
              Create Free Account
            </button>
-           <button onClick={() => router.push('/swipe')} className={`${mainButtonClass} border-2 border-pink-500 hover:border-pink-400`}>
+           <button 
+             onClick={() => router.push('/swipe')} 
+             className={`${mainButtonClass} border-2 border-pink-500 hover:border-pink-400`}
+           >
              Start Swiping Now
            </button>
          </motion.div>
