@@ -6,7 +6,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { formatDistanceToNow } from 'date-fns'; 
+import { formatDistanceToNow } from 'date-fns';
 import { Users as UsersIcon, Compass as CompassIcon } from 'lucide-react'; // For nav consistency
 
 // --- Types ---
@@ -21,6 +21,25 @@ interface Style { name: string; }
 interface SwipeStats { total: number; likes: number; dislikes: number; }
 interface TopStyle { name: string; likes: number; }
 interface RecentActivityItem { id: number; direction: boolean; imageName: string; styleName: string; timestamp: string; }
+
+// Define more specific types for Supabase responses to help TypeScript
+interface SupabaseImageWithSingleStyle {
+  styles: { name: string | null } | null | { name: string | null }[]; // Can be object, null, or array of objects
+}
+
+interface SupabaseSwipeWithImageData {
+  id: number;
+  direction: boolean;
+  created_at: string;
+  images: { // Can be object, null, or array of objects
+    storage_path: string | null;
+    styles: { name: string | null } | null | { name: string | null }[];
+  } | null | {
+    storage_path: string | null;
+    styles: { name: string | null } | null | { name: string | null }[];
+  }[];
+}
+
 
 // --- Simple Heart component for background decoration (copied from page.tsx) ---
 const Heart = ({ className = '' }: { className?: string }) => (
@@ -69,7 +88,7 @@ export default function ProfilePage() {
     if (!isLoadingAuth && session && supabase && !profile && !loading_profile && !profile_fetch_attempted.current) {
       set_loading_profile(true);
       set_error(null);
-      profile_fetch_attempted.current = true; 
+      profile_fetch_attempted.current = true;
       const fetch_user_profile = async () => {
         try {
           const { data, error: profile_error } = await supabase
@@ -87,7 +106,7 @@ export default function ProfilePage() {
               const { id, ...new_profile_state } = new_profile_data;
               set_profile(new_profile_state); set_form_data(new_profile_state); set_selected_styles([]);
             } else { throw profile_error; }
-          } else {
+          } else if (data) { // Ensure data is not null
             set_profile(data); set_form_data(data); set_selected_styles(data.architectural_preferences || []);
           }
         } catch (err: any) {
@@ -110,7 +129,9 @@ export default function ProfilePage() {
             try {
                 const { data, error: styles_error } = await supabase.from('styles').select('name').order('name', { ascending: true });
                 if (styles_error) throw styles_error;
-                set_available_styles(data.map((style: Style) => style.name));
+                if (data) {
+                    set_available_styles(data.map((style: Style) => style.name));
+                }
             } catch (err: any) {
                 set_error(prev => prev ? `${prev}\nFailed to load styles: ${err.message}` : `Failed to load styles: ${err.message}`);
             } finally { set_loading_styles(false); }
@@ -134,29 +155,70 @@ export default function ProfilePage() {
 
                 const { data: liked_swipes, error: liked_swipes_error } = await supabase.from('swipes').select('image_id').eq('user_id', user_id).eq('direction', true);
                 if (liked_swipes_error) throw new Error(`TopStyles(Swipes): ${liked_swipes_error.message}`);
+
                 if (liked_swipes && liked_swipes.length > 0) {
                     const image_ids = liked_swipes.map(s => s.image_id);
-                    const { data: liked_images_with_styles, error: liked_images_error } = await supabase.from('images').select('styles ( name )').in('id', image_ids);
+                    // Explicitly type the expected response for liked_images_with_styles
+                    const { data: liked_images_with_styles, error: liked_images_error } =
+                        await supabase.from('images')
+                                    .select('styles ( name )')
+                                    .in('id', image_ids) as { data: SupabaseImageWithSingleStyle[] | null; error: any };
+
                     if (liked_images_error) throw new Error(`TopStyles(Images/Styles): ${liked_images_error.message}`);
                     const style_counts: Record<string, number> = {};
-                    liked_images_with_styles?.forEach(img => {
-                        const style_name = img.styles?.name;
+
+                    liked_images_with_styles?.forEach(img_container => { // img_container is SupabaseImageWithSingleStyle
+                        let style_name: string | undefined | null = undefined;
+                        if (img_container.styles) {
+                            if (Array.isArray(img_container.styles) && img_container.styles.length > 0) {
+                                style_name = img_container.styles[0]?.name;
+                            } else if (!Array.isArray(img_container.styles)) { // It's a single object
+                                style_name = (img_container.styles as { name: string | null })?.name;
+                            }
+                        }
                         if (style_name) { style_counts[style_name] = (style_counts[style_name] || 0) + 1; }
                     });
-                    const sorted_top_styles = Object.entries(style_counts).map(([name, likes]) => ({ name, likes })).sort((a, b) => b.likes - a.likes).slice(0, 5);
+                    const sorted_top_styles = Object.entries(style_counts).map(([name, likes_val]) => ({ name, likes: likes_val })).sort((a, b) => b.likes - a.likes).slice(0, 5);
                     set_top_liked_styles(sorted_top_styles);
                 } else { set_top_liked_styles([]); }
 
-                const { data: recent_swipes_data, error: recent_swipes_error } = await supabase.from('swipes').select(`id, direction, created_at, images ( storage_path, styles ( name ) )`).eq('user_id', user_id).order('created_at', { ascending: false }).limit(10);
+                // Explicitly type the expected response for recent_swipes_data
+                const { data: recent_swipes_data, error: recent_swipes_error } =
+                    await supabase.from('swipes')
+                                .select(`id, direction, created_at, images ( storage_path, styles ( name ) )`)
+                                .eq('user_id', user_id)
+                                .order('created_at', { ascending: false })
+                                .limit(10) as { data: SupabaseSwipeWithImageData[] | null; error: any };
+
                 if (recent_swipes_error) throw new Error(`RecentActivity: ${recent_swipes_error.message}`);
+
                 const formatted_recent_activities = recent_swipes_data?.map(swipe => {
-                    const image_data = swipe.images; const full_path = image_data?.storage_path ?? '';
+                    let actual_image_data: { storage_path: string | null; styles: { name: string | null } | null | { name: string | null }[] } | null = null;
+                    if (swipe.images) {
+                        if (Array.isArray(swipe.images) && swipe.images.length > 0) {
+                            actual_image_data = swipe.images[0];
+                        } else if (!Array.isArray(swipe.images)) {
+                            actual_image_data = swipe.images as { storage_path: string | null; styles: { name: string | null } | null | { name: string | null }[] };
+                        }
+                    }
+
+                    const full_path = actual_image_data?.storage_path ?? '';
                     const file_name_with_ext = full_path.split('/').pop() ?? 'Unknown Image';
                     const file_name = file_name_with_ext.includes('.') ? file_name_with_ext.substring(0, file_name_with_ext.lastIndexOf('.')) : file_name_with_ext;
-                    const style_name = image_data?.styles?.name ?? 'Unknown Style';
-                    return { id: swipe.id, direction: swipe.direction, imageName: file_name || 'Untitled Image', styleName: style_name, timestamp: swipe.created_at };
+                    
+                    let style_name_for_activity: string | undefined | null = 'Unknown Style';
+                    if (actual_image_data?.styles) {
+                        if (Array.isArray(actual_image_data.styles) && actual_image_data.styles.length > 0) {
+                            style_name_for_activity = actual_image_data.styles[0]?.name;
+                        } else if (!Array.isArray(actual_image_data.styles)) {
+                            style_name_for_activity = (actual_image_data.styles as { name: string | null })?.name;
+                        }
+                    }
+
+                    return { id: swipe.id, direction: swipe.direction, imageName: file_name || 'Untitled Image', styleName: style_name_for_activity ?? 'Unknown Style', timestamp: swipe.created_at };
                 }) ?? [];
                 set_recent_activities(formatted_recent_activities);
+
             } catch (err: any) {
                 set_error(`Failed to load activity data: ${err.message}`);
                 set_swipe_stats(null); set_top_liked_styles([]); set_recent_activities([]);
@@ -202,11 +264,11 @@ export default function ProfilePage() {
        };
       set_profile(updated_profile_state); set_form_data(updated_profile_state);
       set_success_message('Profile updated successfully!'); setTimeout(() => set_success_message(null), 3000);
-      set_is_editing(false); 
+      set_is_editing(false);
     } catch (err: any) {
       set_error(`Update failed: ${err.message || 'Unknown error'}`);
     } finally { set_saving(false); }
-  }, [session, form_data, selected_styles, supabase, profile]); 
+  }, [session, form_data, selected_styles, supabase, profile]);
 
 
   const handle_avatar_upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -236,7 +298,7 @@ export default function ProfilePage() {
         const { error: sign_out_error } = await supabase.auth.signOut();
         if (sign_out_error) console.error('Error signing out:', sign_out_error);
     }
-    router.push('/auth'); 
+    router.push('/auth');
   };
 
 
@@ -307,7 +369,7 @@ export default function ProfilePage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             // Keeping bg-white for the profile card itself for good contrast
-            className="bg-white rounded-3xl shadow-xl overflow-hidden border border-pink-100" 
+            className="bg-white rounded-3xl shadow-xl overflow-hidden border border-pink-100"
         >
             {/* Profile Header/Banner */}
             <div className="h-48 bg-gradient-to-r from-pink-400 to-pink-700 relative">
@@ -485,7 +547,7 @@ export default function ProfilePage() {
                      )}
                    </div>
                  )}
-            </div> 
+            </div>
         </motion.div>
        </section>
 
