@@ -18,9 +18,10 @@ import {
   useTransform,
   animate,
   PanInfo,
+  AnimationOptions // Import AnimationOptions
 } from 'framer-motion';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { Users as UsersIcon, Compass as CompassIcon, Home as HomeIconLucide } from 'lucide-react'; // Added HomeIconLucide
+import { Users as UsersIcon, Compass as CompassIcon, Home as HomeIconLucide } from 'lucide-react';
 
 // -----------------------------------------------------------------------------
 // Types & Constants
@@ -43,7 +44,7 @@ const VISIBLE_CARDS = 3;
 const FETCH_COUNT = 5;              
 
 // --- Simple Heart component for background decoration (copied from page.tsx) ---
-const HeartBG = ({ className = '' }: { className?: string }) => ( // Renamed to HeartBG to avoid conflict with lucide-react Heart
+const HeartBG = ({ className = '' }: { className?: string }) => (
   <div className={`absolute text-[rgb(var(--primary-rgb))] ${className}`}>❤️</div>
 );
 
@@ -80,7 +81,6 @@ export default function SwipePage() {
   const handleSignOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
-    // router.replace('/auth'); // AuthContext will handle redirect via useEffect listener
   };
 
   const fetchImages = useCallback(async (count = FETCH_COUNT) => {
@@ -147,6 +147,12 @@ export default function SwipePage() {
             throw swipeError; 
         }
         setCards(prev => {
+            const cardIndex = prev.findIndex(card => card.id === imageId);
+            if (cardIndex > -1) {
+                const newCards = [...prev];
+                newCards.splice(cardIndex, 1);
+                return newCards;
+            }
             if (prev.length > 0 && prev[0].id === imageId) {
                 return prev.slice(1);
             }
@@ -183,7 +189,7 @@ export default function SwipePage() {
 
 
   if (isLoadingAuth) {
-    return ( // Using the same loading screen as profile page for consistency
+    return (
       <div className="min-h-screen bg-gradient-to-b from-pink-50 to-white flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
           <div className="flex flex-col items-center justify-center space-y-6">
@@ -202,10 +208,8 @@ export default function SwipePage() {
   }
   if (!session || !supabase) return null;
 
-  // --- MODIFIED: Replaced main tag class and added decorative elements ---
   return (
-    <main className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-fuchsia-50 text-slate-700 overflow-hidden"> {/* Added overflow-hidden to main for swipe page */}
-      {/* Decorative elements from page.tsx */}
+    <main className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-fuchsia-50 text-slate-700 overflow-hidden">
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-80">
         <div className="absolute top-20 left-10 w-64 h-64 rounded-full bg-pink-200/30 blur-3xl animate-pulse-slow"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 rounded-full bg-rose-300/30 blur-3xl animate-pulse-slow animation-delay-2000"></div>
@@ -213,10 +217,8 @@ export default function SwipePage() {
         <HeartBG className="top-16 left-1/4 text-6xl opacity-20 -rotate-12 animate-pulse-slow animation-delay-2000" />
         <HeartBG className="top-1/3 right-12 text-8xl opacity-15 rotate-[25deg] animate-pulse-slow" />
         <HeartBG className="top-3/4 left-10 text-5xl opacity-25 rotate-6 animate-pulse-slow animation-delay-4000" />
-        {/* Removed some of the page.tsx specific hearts if they were too much for swipe page, can add back if desired */}
       </div>
 
-      {/* MODIFIED Header to match page.tsx style */}
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md shadow-sm">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
@@ -268,11 +270,10 @@ export default function SwipePage() {
         </div>
       </section>
 
-      {/* MODIFIED: Footer from page.tsx */}
        <footer className="py-12 bg-slate-900 text-slate-400 relative z-10 mt-12">
          <div className="container mx-auto px-4 text-center">
            <div className="text-3xl font-bold text-[rgb(var(--primary-rgb))] mb-4">ArchiSwipe</div>
-           <p className="mb-2">© {new Date().getFullYear()} ArchiSwipe - Swipe your way to architectural enlightenment.</p> {/* Different witty remark */}
+           <p className="mb-2">© {new Date().getFullYear()} ArchiSwipe - Swipe your way to architectural enlightenment.</p>
            <p className="text-sm mb-6">Warning: May cause serious emotional attachment to inanimate structures.</p>
            <div className="flex justify-center space-x-6 mb-6">
              <a href="#" className="hover:text-[rgb(var(--primary-rgb))] smooth-transition">Terms</a>
@@ -289,7 +290,7 @@ export default function SwipePage() {
 }
 
 // -----------------------------------------------------------------------------
-// Card Component (Unchanged from previous version - for brevity, not repeated fully)
+// Card Component
 // -----------------------------------------------------------------------------
 interface CardProps {
     cardData: ImageCardData;
@@ -303,33 +304,70 @@ const Card = forwardRef<CardApi, CardProps>(({
     cardData, isActive, visualIndex, onSwipeComplete, supabase,
   }, ref) => { 
     const x = useMotionValue(0); 
+    const cardOpacity = useMotionValue(1); // Renamed from opacity to avoid conflict
+    
+    // Motion values for scale and y, to be controlled by useEffect
+    const scale = useMotionValue(isActive ? 1 : Math.max(0, 1 - (visualIndex * 0.05)));
+    const y = useMotionValue(isActive ? 0 : visualIndex * 10);
+
     const rotate = useTransform(x, [-200, 0, 200], [-25, 0, 25], { clamp: false });
     const heartOpacity = useTransform(x, [0, SWIPE_THRESHOLD * 0.3, SWIPE_THRESHOLD], [0, 0.6, 1]);
     const heartScale = useTransform(x, [0, SWIPE_THRESHOLD * 0.3, SWIPE_THRESHOLD], [0.3, 0.8, 1]);
     const xOpacity = useTransform(x, [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD * 0.3, 0], [1, 0.6, 0]);
-    const xScale = useTransform(x, [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD * 0.3, 0], [1, 0.8, 0.3]);
-    const cardVisualScale = isActive ? 1 : Math.max(0, 1 - (visualIndex * 0.05)); 
-    const yOffset = isActive ? 0 : visualIndex * 10; 
+    const xCrossScale = useTransform(x, [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD * 0.3, 0], [1, 0.8, 0.3]); // Renamed
+    
     const zIndex = VISIBLE_CARDS - visualIndex; 
+    
     const rawStoragePath = decodeURIComponent(cardData.storage_path);
     const { data: urlData } = supabase.storage.from('house-images').getPublicUrl(rawStoragePath);
     const imgUrl = urlData?.publicUrl;
+
+    // Effect to animate scale and y when visualIndex or isActive changes
+    useEffect(() => {
+        const targetScale = isActive ? 1 : Math.max(0, 1 - (visualIndex * 0.05));
+        const targetY = isActive ? 0 : visualIndex * 10;
+
+        // Define the animation transition (using the exaggerated one for testing)
+        // const transition: AnimationOptions<number> = { 
+        //     type: "spring", 
+        //     stiffness: 30, // Low stiffness for slow, exaggerated effect
+        //     damping: 10,   // Controls bounciness
+        //     mass: 2        // Makes it feel "heavier"
+        // };
+        // Or for a more normal feel later:
+        const transition: AnimationOptions<number> = { type: "spring", stiffness: 250, damping: 25, mass: 0.8 };
+
+
+        animate(scale, targetScale, transition);
+        animate(y, targetY, transition);
+
+    }, [visualIndex, isActive, scale, y]); // Dependencies: re-run if these change
   
     const triggerSwipeAnimation = useCallback((direction: 'left' | 'right') => {
       if (!onSwipeComplete) return;
       const flyToX = direction === 'left' ? -450 : 450; 
-      animate(x, flyToX, { duration: CARD_FLY_OUT_DURATION, ease: 'easeOut' })
-        .then(() => {
-          requestAnimationFrame(() => onSwipeComplete(direction));
-        });
-    }, [onSwipeComplete, x]); 
+      
+      const xAnimation = animate(x, flyToX, { 
+        duration: CARD_FLY_OUT_DURATION, 
+        ease: 'easeOut' 
+      });
+      
+      animate(cardOpacity, 0, { 
+        duration: CARD_FLY_OUT_DURATION * 0.9,
+        ease: 'easeIn' 
+      });
+
+      xAnimation.then(() => {
+        requestAnimationFrame(() => onSwipeComplete(direction));
+      });
+    }, [onSwipeComplete, x, cardOpacity, scale, y]); // Added scale and y though not directly used in swipe anim logic
 
     useImperativeHandle(ref, () => ({
         triggerSwipe: triggerSwipeAnimation
     }), [triggerSwipeAnimation]); 
   
     const handleDragEnd = (_: any, info: PanInfo) => {
-      if (!isActive) return;
+      if (!isActive) return; // Only the active card is draggable
       const { offset, velocity } = info; 
       if (Math.abs(offset.x) > SWIPE_THRESHOLD || Math.abs(velocity.x) > 200 ) {
         triggerSwipeAnimation(offset.x > 0 ? 'right' : 'left');
@@ -342,17 +380,22 @@ const Card = forwardRef<CardApi, CardProps>(({
       <motion.div
         className="absolute w-full h-full rounded-xl shadow-lg overflow-hidden cursor-grab bg-white border border-gray-200"
         style={{
-          x: isActive ? x : 0, rotate: rotate, zIndex,             
-          scale: cardVisualScale, y: yOffset,         
-          transition: 'scale 0.3s ease-out, y 0.3s ease-out',
+          x: isActive ? x : 0, // x motion value for active, 0 for others
+          rotate: rotate,       // derived from x
+          zIndex,              
+          opacity: cardOpacity,   // motion value for opacity
+          scale: scale,         // motion value for scale
+          y: y,                 // motion value for y
         }}
         drag={isActive ? 'x' : false} 
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }} 
-        onDragEnd={handleDragEnd} 
+        onDragEnd={handleDragEnd}
+        // No top-level `animate` or `transition` prop here, as scale/y are handled by useEffect
       >
         <div className="relative w-full h-full flex items-center justify-center">
           {imgUrl ? <img src={imgUrl} alt={cardData.description || 'Architectural image'} className="block w-full h-auto max-h-full pointer-events-none" draggable="false" />
             : <div className="w-full h-full flex items-center justify-center text-gray-400">Loading image...</div> }
+          {/* Overlays */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
             <motion.div style={{ opacity: heartOpacity, scale: heartScale, transformOrigin: 'center center' }} className="p-3 sm:p-4 bg-black/20 rounded-full flex items-center justify-center">
               <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center bg-pink-500/90 rounded-full shadow-2xl border-2 border-pink-300">
@@ -361,7 +404,7 @@ const Card = forwardRef<CardApi, CardProps>(({
             </motion.div>
           </div>
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-            <motion.div style={{ opacity: xOpacity, scale: xScale, transformOrigin: 'center center' }} className="p-3 sm:p-4 bg-black/20 rounded-full flex items-center justify-center">
+            <motion.div style={{ opacity: xOpacity, scale: xCrossScale, transformOrigin: 'center center' }} className="p-3 sm:p-4 bg-black/20 rounded-full flex items-center justify-center">
               <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center bg-red-500/90 rounded-full shadow-2xl border-2 border-red-300">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </div>
@@ -371,4 +414,4 @@ const Card = forwardRef<CardApi, CardProps>(({
       </motion.div>
     );
   });
-Card.displayName = 'Card'; 
+Card.displayName = 'Card';
