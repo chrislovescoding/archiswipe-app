@@ -18,14 +18,11 @@ export const metadata: Metadata = {
 
   // --- UPDATE FAVICON METADATA HERE ---
   icons: {
-    icon: '/favicon.png', // Points to your favicon.png in src/app/
-    // shortcut: '/favicon.ico', // You can remove this if you're not using a .ico file
-    apple: '/favicon.png', // Use favicon.png for Apple touch, or provide a separate /apple-icon.png
-    // If you created a specific apple-icon.png (e.g., 180x180px) and placed it in src/app/,
+    icon: '/favicon.ico', // Points to the favicon in your src/app directory
+    shortcut: '/favicon.ico', // Also for favicon.ico
+    apple: '/favicon.ico', // You can use favicon.ico for Apple touch icon, or create a separate apple-icon.png
+    // If you create a specific apple-icon.png (e.g., 180x180px) and place it in src/app/,
     // you would change the 'apple' line to: apple: '/apple-icon.png',
-    // And if your main icon was named icon.png:
-    // icon: '/icon.png',
-    // apple: '/apple-icon.png', // or just '/icon.png' if reusing
   },
 };
 
