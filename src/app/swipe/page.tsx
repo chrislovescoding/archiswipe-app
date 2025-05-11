@@ -18,8 +18,6 @@ import {
   useTransform,
   animate,
   PanInfo,
-  // AnimationOptions // This was the issue, it's not generic directly here
-  // We will use 'Transition' for type from framer-motion
   Transition as FramerTransition
 } from 'framer-motion';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -112,7 +110,7 @@ export default function SwipePage() {
             return prev;
         });
       }
-    } catch (err: any) { // Keep 'any' here or define a specific error type for RPC calls
+    } catch (err: any) { 
       setError(err.message || 'Failed to fetch images.');
     } finally {
       setIsLoading(false);
@@ -136,18 +134,26 @@ export default function SwipePage() {
 
 
   const completeSwipe = useCallback(
-    async (imageId: number, direction: 'left' | 'right') => {
+    async (imageId: number, direction: 'left' | 'right', durationMs: number | null) => { // MODIFIED: Added durationMs
       if (!session?.user?.id || !supabase || currentlyProcessingSwipe.current.has(imageId)) {
         return;
       }
       currentlyProcessingSwipe.current.add(imageId);
       try {
         const { error: swipeError } = await supabase.from('swipes').insert({
-          user_id: session.user.id, image_id: imageId, direction: direction === 'right',
+          user_id: session.user.id,
+          image_id: imageId,
+          direction: direction === 'right',
+          time_spent_on_card_ms: durationMs, // ADDED: time_spent_on_card_ms
         });
-        if (swipeError && swipeError.code !== '23505') {
-            throw swipeError;
+        if (swipeError && swipeError.code !== '23505') { // 23505 is unique violation, might happen with rapid clicks, can be ignored
+            console.warn(`Swipe recording potentially failed or was a duplicate: `, swipeError);
+            // Depending on strictness, you might throw or just log. For now, log and continue.
+            // If it's NOT a unique violation, then it's a more serious error.
+            if (swipeError.code !== '23505') throw swipeError;
         }
+        
+        // Optimistically remove card from UI
         setCards(prev => {
             const cardIndex = prev.findIndex(card => card.id === imageId);
             if (cardIndex > -1) {
@@ -155,16 +161,18 @@ export default function SwipePage() {
                 newCards.splice(cardIndex, 1);
                 return newCards;
             }
-            // This secondary check might be redundant if splice always finds the card,
-            // but it's a fallback if the card was already removed by another means.
-            if (prev.length > 0 && prev[0].id === imageId) {
-                return prev.slice(1);
-            }
-            return prev;
+            // Fallback if the card was already removed by another means or not found (should be rare)
+            // This also handles the case where the card to be removed is the first one.
+             if (prev.length > 0 && prev[0].id === imageId) {
+                 return prev.slice(1);
+             }
+            return prev; // No change if card not found
         });
+
       } catch (err) {
-        console.error(`[Swipe Error] ID: ${imageId}`, err);
+        console.error(`[Swipe Error] ID: ${imageId}, Duration: ${durationMs}ms`, err);
         // Optionally set an error state here to inform the user if a swipe fails to record
+        // For now, we let the card be removed optimistically, but log the error.
       } finally {
         currentlyProcessingSwipe.current.delete(imageId);
       }
@@ -184,7 +192,7 @@ export default function SwipePage() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isLoadingAuth, cards.length]); // Removed activeCardRef from deps as it's a ref, value changes don't trigger re-run
+  }, [isLoadingAuth, cards.length]); 
 
 
   const handleButtonSwipe = (direction: 'left' | 'right') => {
@@ -249,16 +257,19 @@ export default function SwipePage() {
           {outOfCards && cards.length === 0 && !isLoading && ( <div className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-lg shadow-md p-4 text-center"><p className="text-xl font-semibold text-gray-600">All Swiped!</p><p className="text-md text-gray-500 mt-2">You've viewed all available images.</p></div> )}
 
           {cards.slice(0, VISIBLE_CARDS).reverse().map((card, indexInReversedStack) => {
-             const index = VISIBLE_CARDS - 1 - indexInReversedStack;
-             const isActive = index === 0;
+             const index = VISIBLE_CARDS - 1 - indexInReversedStack; // This calculates the card's depth in the visual stack
+             const isActive = index === 0; // The card at the top of the visual stack (depth 0) is active
             return (
               <Card
                 key={card.id}
                 ref={isActive ? activeCardRef : null}
                 cardData={card}
                 isActive={isActive}
-                visualIndex={index}
-                onSwipeComplete={direction => isActive ? completeSwipe(card.id, direction) : undefined}
+                visualIndex={index} // This is its depth in the stack (0 for top, 1 for next, etc.)
+                // MODIFIED: Pass durationMs from Card's onSwipeComplete to completeSwipe
+                onSwipeComplete={(direction, durationMs) => 
+                    isActive ? completeSwipe(card.id, direction, durationMs) : undefined
+                }
                 supabase={supabase}
               />
             );
@@ -301,7 +312,8 @@ interface CardProps {
     cardData: ImageCardData;
     isActive: boolean;
     visualIndex: number;
-    onSwipeComplete?: (direction: 'left' | 'right') => void;
+    // MODIFIED: onSwipeComplete now includes durationMs
+    onSwipeComplete?: (direction: 'left' | 'right', durationMs: number | null) => void;
     supabase: SupabaseClient;
 }
 
@@ -309,9 +321,8 @@ const Card = forwardRef<CardApi, CardProps>(({
     cardData, isActive, visualIndex, onSwipeComplete, supabase,
   }, ref) => {
     const x = useMotionValue(0);
-    const cardOpacity = useMotionValue(1); // Renamed from opacity to avoid conflict
+    const cardOpacity = useMotionValue(1); 
 
-    // Motion values for scale and y, to be controlled by useEffect
     const scale = useMotionValue(isActive ? 1 : Math.max(0, 1 - (visualIndex * 0.05)));
     const y = useMotionValue(isActive ? 0 : visualIndex * 10);
 
@@ -319,7 +330,7 @@ const Card = forwardRef<CardApi, CardProps>(({
     const heartOpacity = useTransform(x, [0, SWIPE_THRESHOLD * 0.3, SWIPE_THRESHOLD], [0, 0.6, 1]);
     const heartScale = useTransform(x, [0, SWIPE_THRESHOLD * 0.3, SWIPE_THRESHOLD], [0.3, 0.8, 1]);
     const xOpacity = useTransform(x, [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD * 0.3, 0], [1, 0.6, 0]);
-    const xCrossScale = useTransform(x, [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD * 0.3, 0], [1, 0.8, 0.3]); // Renamed
+    const xCrossScale = useTransform(x, [-SWIPE_THRESHOLD, -SWIPE_THRESHOLD * 0.3, 0], [1, 0.8, 0.3]);
 
     const zIndex = VISIBLE_CARDS - visualIndex;
 
@@ -327,44 +338,57 @@ const Card = forwardRef<CardApi, CardProps>(({
     const { data: urlData } = supabase.storage.from('house-images').getPublicUrl(rawStoragePath);
     const imgUrl = urlData?.publicUrl;
 
-    // Effect to animate scale and y when visualIndex or isActive changes
+    // ADDED: Ref to store the start time when the card becomes active
+    const startTimeRef = useRef<number | null>(null);
+
+    // ADDED: Effect to record start time when card becomes active
+    useEffect(() => {
+      if (isActive && startTimeRef.current === null) {
+        startTimeRef.current = Date.now();
+      }
+      // If the card becomes inactive and wasn't swiped (e.g. stack reorder, though not current logic),
+      // you might want to clear startTimeRef.current here.
+      // For now, it's set once when it becomes active.
+    }, [isActive]);
+
     useEffect(() => {
         const targetScale = isActive ? 1 : Math.max(0, 1 - (visualIndex * 0.05));
         const targetY = isActive ? 0 : visualIndex * 10;
-
-        // Corrected type for transition
         const transition: FramerTransition = { type: "spring", stiffness: 250, damping: 25, mass: 0.8 };
-
         animate(scale, targetScale, transition);
         animate(y, targetY, transition);
-
-    }, [visualIndex, isActive, scale, y]); // Dependencies: re-run if these change
+    }, [visualIndex, isActive, scale, y]);
 
     const triggerSwipeAnimation = useCallback((direction: 'left' | 'right') => {
       if (!onSwipeComplete) return;
-      const flyToX = direction === 'left' ? -450 : 450;
 
+      // ADDED: Calculate duration
+      const endTime = Date.now();
+      const durationMs = startTimeRef.current ? endTime - startTimeRef.current : null;
+      // console.log(`Card ${cardData.id} swiped. Duration: ${durationMs}ms`); // For debugging
+
+      const flyToX = direction === 'left' ? -450 : 450;
       const xAnimation = animate(x, flyToX, {
         duration: CARD_FLY_OUT_DURATION,
         ease: 'easeOut'
       });
-
       animate(cardOpacity, 0, {
         duration: CARD_FLY_OUT_DURATION * 0.9,
         ease: 'easeIn'
       });
 
       xAnimation.then(() => {
-        requestAnimationFrame(() => onSwipeComplete(direction));
+        // MODIFIED: Pass durationMs to onSwipeComplete
+        requestAnimationFrame(() => onSwipeComplete(direction, durationMs));
       });
-    }, [onSwipeComplete, x, cardOpacity]); // Removed scale and y as they are not directly used in this callback's logic
+    }, [onSwipeComplete, x, cardOpacity, cardData.id]); // Added cardData.id for debug logging if needed
 
     useImperativeHandle(ref, () => ({
         triggerSwipe: triggerSwipeAnimation
     }), [triggerSwipeAnimation]);
 
-    const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => { // Added _event type
-      if (!isActive) return; // Only the active card is draggable
+    const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => { 
+      if (!isActive) return; 
       const { offset, velocity } = info;
       if (Math.abs(offset.x) > SWIPE_THRESHOLD || Math.abs(velocity.x) > 200 ) {
         triggerSwipeAnimation(offset.x > 0 ? 'right' : 'left');
@@ -377,17 +401,16 @@ const Card = forwardRef<CardApi, CardProps>(({
       <motion.div
         className="absolute w-full h-full rounded-xl shadow-lg overflow-hidden cursor-grab bg-white border border-gray-200"
         style={{
-          x: isActive ? x : 0, // x motion value for active, 0 for others
-          rotate: rotate,       // derived from x
+          x: isActive ? x : 0, 
+          rotate: rotate,       
           zIndex,
-          opacity: cardOpacity,   // motion value for opacity
-          scale: scale,         // motion value for scale
-          y: y,                 // motion value for y
+          opacity: cardOpacity,   
+          scale: scale,         
+          y: y,                 
         }}
         drag={isActive ? 'x' : false}
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
         onDragEnd={handleDragEnd}
-        // No top-level `animate` or `transition` prop here, as scale/y are handled by useEffect
       >
         <div className="relative w-full h-full flex items-center justify-center">
           {imgUrl ? <img src={imgUrl} alt={cardData.description || 'Architectural image'} className="block w-full h-auto max-h-full pointer-events-none" draggable="false" />

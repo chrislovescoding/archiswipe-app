@@ -11,18 +11,23 @@ import { formatDistanceToNow } from 'date-fns';
 import {
   Users as UsersIcon,
   Compass as CompassIcon,
-  Heart as HeartIconLucide, // For StatCard
-  X as XIcon,               // For StatCard
-  Percent as PercentIcon,   // For StatCard
-  Sparkles as SparklesIcon, // For StatCard
-  Building as BuildingIcon, // For StatCard
-  Edit3 as EditIcon,        // For avatar edit
-  Camera as CameraIcon,     // For avatar edit icon
-  LogOut as LogOutIcon,     // For sign out
-  Activity as ActivityIcon, // For tabs
-  Settings as SettingsIcon, // For tabs
-  User as UserIconRegular,  // For tabs
-  ChevronRightIcon         // For continue swiping button
+  Heart as HeartIconLucide,
+  X as XIcon,              
+  Percent as PercentIcon,   
+  Sparkles as SparklesIcon,
+  Building as BuildingIcon,
+  Edit3 as EditIcon,       
+  Camera as CameraIcon,    
+  LogOut as LogOutIcon,    
+  Activity as ActivityIcon,
+  Settings as SettingsIcon,
+  User as UserIconRegular, 
+  ChevronRight as ChevronRightIcon,
+  Clock as ClockIcon, 
+  FastForward as FastForwardIcon, 
+  Rewind as RewindIcon,
+  Dna as DnaIcon, // For Architectural DNA
+  TrendingUp as TrendingUpIcon, // Alternative for consistency
 } from 'lucide-react';
 
 // --- Types ---
@@ -35,13 +40,20 @@ interface ProfileData {
 }
 interface Style { name: string; }
 
-// NEW: Type for the RPC response
 interface RecentActivityItemFromRPC {
   id: number;
   direction: boolean;
   imageName: string;
   styleName: string;
   timestamp: string;
+}
+
+// NEW: Interface for style like ratio item
+interface StyleLikeRatioItem {
+  styleName: string;
+  totalSeenInStyle: number;
+  totalLikedInStyle: number;
+  likeRatio: number;
 }
 
 interface UserActivitySummary {
@@ -53,6 +65,11 @@ interface UserActivitySummary {
   topDislikedStyles: { name: string; dislikes: number }[];
   discoveredStyleCount: number;
   recentActivity: RecentActivityItemFromRPC[];
+  avg_swipe_time_ms: number | null;
+  min_swipe_time_ms: number | null;
+  max_swipe_time_ms: number | null;
+  // NEW: Field for style like ratios
+  style_like_ratios: StyleLikeRatioItem[] | null;
 }
 
 
@@ -65,12 +82,13 @@ const HeartBG = ({ className = '' }: { className?: string }) => (
 interface StatCardProps {
   title: string;
   value: string | number;
-  icon?: React.ReactNode; // Allow passing any Lucide icon or custom SVG
-  bgColor?: string; // Optional background color for the icon container
-  textColor?: string; // Optional text color for the icon
+  icon?: React.ReactNode; 
+  bgColor?: string; 
+  textColor?: string; 
+  subtext?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, bgColor = "bg-pink-100", textColor = "text-pink-600" }) => {
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, bgColor = "bg-pink-100", textColor = "text-pink-600", subtext }) => {
   return (
     <div className="bg-white p-5 rounded-xl shadow-lg border border-pink-100 hover:shadow-pink-200/50 transition-shadow duration-300 flex flex-col items-center text-center h-full">
       {icon && (
@@ -80,8 +98,14 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, bgColor = "bg-p
       )}
       <div className="text-3xl font-bold text-pink-600 mb-1">{value}</div>
       <div className="text-sm text-gray-500 leading-tight">{title}</div>
+      {subtext && <div className="text-xs text-gray-400 mt-0.5">{subtext}</div>}
     </div>
   );
+};
+
+const formatMsToSeconds = (ms: number | null | undefined): string => {
+  if (ms === null || ms === undefined) return 'N/A';
+  return (ms / 1000).toFixed(1); 
 };
 
 
@@ -91,8 +115,8 @@ export default function ProfilePage() {
 
   const [profile, set_profile] = useState<ProfileData | null>(null);
   const [loading_profile, set_loading_profile] = useState(false);
-  const [error, set_error] = useState<string | null>(null); // General error for the page
-  const [activityError, setActivityError] = useState<string | null>(null); // Specific error for activity tab
+  const [error, set_error] = useState<string | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
   const [is_editing, set_is_editing] = useState(false);
   const [form_data, set_form_data] = useState<ProfileData | null>(null);
   const [saving, set_saving] = useState(false);
@@ -102,13 +126,12 @@ export default function ProfilePage() {
   const [loading_styles, set_loading_styles] = useState(false);
   const [success_message, set_success_message] = useState<string | null>(null);
 
-  // NEW State for Activity Summary
   const [summary_data, set_summary_data] = useState<UserActivitySummary | null>(null);
   const [loading_summary, set_loading_summary] = useState(false);
 
   const profile_fetch_attempted = useRef(false);
   const styles_fetch_attempted = useRef(false);
-  const summary_fetch_attempted = useRef(false); // Changed from activity_fetch_attempted
+  const summary_fetch_attempted = useRef(false);
 
 
   const navLinkBase = "px-4 py-2 rounded-full font-medium smooth-transition text-sm shadow-sm hover:shadow-md";
@@ -135,10 +158,10 @@ export default function ProfilePage() {
             .eq('id', session.user.id)
             .single();
           if (profile_error) {
-            if (profile_error.code === 'PGRST116') { // Profile does not exist, create one
+            if (profile_error.code === 'PGRST116') { 
               const new_profile_data_insert = {
                 id: session.user.id,
-                username: session.user.email?.split('@')[0] || `user_${session.user.id.substring(0,6)}`, // Default username
+                username: session.user.email?.split('@')[0] || `user_${session.user.id.substring(0,6)}`,
                 full_name: null, avatar_url: null, bio: null, architectural_preferences: [],
               };
               const { error: insert_error } = await supabase.from('profiles').insert(new_profile_data_insert);
@@ -155,7 +178,7 @@ export default function ProfilePage() {
       };
       fetch_user_profile();
     }
-    if (!session) { // Reset states if session is lost
+    if (!session) { 
       profile_fetch_attempted.current = false; styles_fetch_attempted.current = false; summary_fetch_attempted.current = false;
       set_profile(null); set_form_data(null); set_selected_styles([]); set_available_styles([]);
       set_summary_data(null);
@@ -178,14 +201,13 @@ export default function ProfilePage() {
         };
         fetch_styles();
     }
-  }, [supabase, loading_styles, available_styles.length]); // Added available_styles.length to re-fetch if it's empty
+  }, [supabase, loading_styles, available_styles.length]); 
 
-  // UPDATED: Fetch Activity Summary Data using RPC
   useEffect(() => {
     if (active_tab === 'activity' && session && supabase && !loading_summary && !summary_fetch_attempted.current) {
       set_loading_summary(true);
       summary_fetch_attempted.current = true;
-      setActivityError(null); // Clear specific activity errors
+      setActivityError(null);
 
       const fetch_summary_data = async () => {
         try {
@@ -196,8 +218,8 @@ export default function ProfilePage() {
           if (rpcError) {
             throw new Error(`RPC Error: ${rpcError.message}`);
           }
-          if (data) {
-            set_summary_data(data as UserActivitySummary);
+          if (data) { 
+            set_summary_data(data as UserActivitySummary); 
           } else {
             set_summary_data(null);
           }
@@ -211,7 +233,7 @@ export default function ProfilePage() {
       fetch_summary_data();
     }
     if (active_tab !== 'activity') {
-      summary_fetch_attempted.current = false; // Reset if tab changes so it can re-fetch
+      summary_fetch_attempted.current = false; 
     }
   }, [active_tab, session, supabase, loading_summary]);
 
@@ -236,7 +258,7 @@ export default function ProfilePage() {
         id: session.user.id, username: form_data.username, full_name: form_data.full_name,
         bio: form_data.bio, architectural_preferences: selected_styles, updated_at: new Date().toISOString(),
       };
-      const { error: update_error } = await supabase.from('profiles').upsert(updates).eq('id', session.user.id); // Use upsert
+      const { error: update_error } = await supabase.from('profiles').upsert(updates).eq('id', session.user.id); 
       if (update_error) {
           if (update_error.message.includes('column "architectural_preferences" does not exist')) {
                throw new Error("Database Error: The 'architectural_preferences' column seems to be missing in your 'profiles' table. Please add it (e.g., as type 'text[]').");
@@ -263,12 +285,11 @@ export default function ProfilePage() {
     const file_name = `${session.user.id}-${Date.now()}.${file_ext}`; const file_path = `${session.user.id}/${file_name}`;
     try {
         set_loading_profile(true); set_error(null); set_success_message(null);
-        // Check if an old avatar exists to delete it, except if it's a placeholder
         if (profile?.avatar_url && !profile.avatar_url.includes('placehold.co')) {
             const old_avatar_path_parts = profile.avatar_url.split('/');
             const old_avatar_name = old_avatar_path_parts.pop();
             const old_avatar_user_folder = old_avatar_path_parts.pop();
-            if (old_avatar_name && old_avatar_user_folder === session.user.id) { // Make sure it's in the user's folder
+            if (old_avatar_name && old_avatar_user_folder === session.user.id) { 
                  await supabase.storage.from('avatars').remove([`${session.user.id}/${old_avatar_name}`]);
             }
         }
@@ -294,35 +315,32 @@ export default function ProfilePage() {
         const { error: sign_out_error } = await supabase.auth.signOut();
         if (sign_out_error) console.error('Error signing out:', sign_out_error);
     }
-    // AuthContext listener should handle redirecting to /auth
   };
 
 
   if (isLoadingAuth || (session && loading_profile && !profile && profile_fetch_attempted.current)) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-pink-50 to-white flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
-          <div className="flex flex-col items-center justify-center space-y-6">
-            <div className="w-24 h-24 bg-pink-100 rounded-full flex items-center justify-center animate-pulse">
-                <UserIconRegular className="h-12 w-12 text-pink-400" />
-            </div>
-            <div className="text-xl font-semibold text-gray-800">
-              {isLoadingAuth ? "Authenticating..." : "Loading Profile..."}
-            </div>
-             <svg className="animate-spin h-8 w-8 text-pink-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-        </div>
+        {/* ... loading spinner ... */}
       </div>
     );
   }
 
-  if (!session) return null; // Auth redirect is handled by useEffect
+  if (!session) return null; 
+
+  // Sort style_like_ratios by likeRatio descending, then by totalSeenInStyle descending for tie-breaking
+  const sortedStyleRatios = summary_data?.style_like_ratios
+    ? [...summary_data.style_like_ratios].sort((a, b) => {
+        if (b.likeRatio !== a.likeRatio) {
+          return b.likeRatio - a.likeRatio;
+        }
+        return b.totalSeenInStyle - a.totalSeenInStyle;
+      })
+    : [];
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-pink-50 via-rose-50 to-fuchsia-50 text-slate-700">
+      {/* ... header and profile card ... */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0 opacity-80">
         <HeartBG className="top-20 left-10 w-64 h-64 blur-3xl animate-pulse-slow animation-delay-2000" />
         <HeartBG className="bottom-20 right-10 w-96 h-96 blur-3xl animate-pulse-slow animation-delay-4000" />
@@ -352,11 +370,15 @@ export default function ProfilePage() {
             className="bg-white rounded-3xl shadow-xl overflow-hidden border border-pink-100"
         >
             <div className="h-40 sm:h-48 bg-gradient-to-r from-pink-400 to-rose-500 relative">
+                {/* ... Avatar and Edit button ... */}
                 <div className="absolute -bottom-12 sm:-bottom-16 left-6 sm:left-10">
                     <div className="relative group">
                         <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white bg-pink-100 flex items-center justify-center overflow-hidden shadow-lg">
                             {loading_profile && is_editing ? (
-                                 <svg className="animate-spin h-8 w-8 text-pink-500" /* ... */></svg>
+                                 <svg className="animate-spin h-8 w-8 text-pink-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
                             ) : profile?.avatar_url ? (
                                 <img src={profile.avatar_url} alt="Profile Avatar" className="w-full h-full object-cover" />
                             ) : ( <UserIconRegular className="h-12 w-12 sm:h-16 sm:w-16 text-pink-400" /> )}
@@ -391,6 +413,7 @@ export default function ProfilePage() {
             </div>
 
             <div className="pt-16 sm:pt-20 pb-8 sm:pb-10 px-6 sm:px-10">
+                {/* ... Name, username, errors, tabs ... */}
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-800 mb-1">{profile?.full_name || profile?.username || "ArchiSwiper"}</h1>
                 <p className="text-sm text-slate-500 mb-6">@{profile?.username || session.user.email}</p>
 
@@ -416,8 +439,9 @@ export default function ProfilePage() {
                    </div>
                 </div>
 
-                {/* Profile Tab */}
+
                 {active_tab === 'profile' && (
+                  // ... Profile form ...
                   <form onSubmit={handle_save_profile}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                       <div>
@@ -441,13 +465,12 @@ export default function ProfilePage() {
                                   className={`w-full px-4 py-2.5 border rounded-lg text-sm ${is_editing ? 'bg-white border-gray-300 text-gray-900 focus:ring-pink-500 focus:border-pink-500' : 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'}`}
                                   placeholder={is_editing ? "Tell us about your architectural interests..." : "No bio yet."}></textarea>
                     </div>
-                    {/* Save/Cancel buttons are moved to the header for edit mode */}
                    </form>
                 )}
 
-                {/* Preferences Tab */}
                 {active_tab === 'preferences' && (
-                    <div>
+                  // ... Preferences content ...
+                   <div>
                         <h2 className="text-xl font-semibold text-gray-800 mb-2">Architectural Preferences</h2>
                         <p className="text-gray-600 mb-6 text-sm">Select styles you love. This helps us match you with buildings you'll adore!</p>
                         {loading_styles && <p className="text-gray-500 italic text-sm">Loading styles...</p>}
@@ -476,13 +499,16 @@ export default function ProfilePage() {
                     </div>
                 )}
 
-                {/* Activity Tab - UPDATED */}
                 {active_tab === 'activity' && (
                    <div>
                      <h2 className="text-xl font-semibold text-gray-800 mb-6">Your ArchiSwipe Activity</h2>
+                     {/* ... loading and error states ... */}
                      {loading_summary && (
                          <div className="text-center py-10">
-                             <svg className="animate-spin h-8 w-8 text-pink-500 mx-auto" /* ... */ ></svg>
+                             <svg className="animate-spin h-8 w-8 text-pink-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                             </svg>
                              <p className="mt-2 text-gray-600">Loading your activity summary...</p>
                          </div>
                      )}
@@ -491,22 +517,84 @@ export default function ProfilePage() {
                             Error: {activityError}
                         </div>
                      )}
+
                      {!loading_summary && !activityError && summary_data && (
                        <>
-                         {/* Overall Stats Section */}
-                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-10">
-                            <StatCard title="Buildings Viewed" value={summary_data.totalSwipes} icon={<BuildingIcon />} />
-                            <StatCard title="Right Swipes" value={summary_data.totalLikes} icon={<HeartIconLucide />} />
-                            <StatCard title="Left Swipes" value={summary_data.totalDislikes} icon={<XIcon />} bgColor="bg-red-100" textColor="text-red-600" />
-                            <StatCard title="Like Ratio" value={`${summary_data.likeRatio}%`} icon={<PercentIcon />} bgColor="bg-blue-100" textColor="text-blue-600" />
-                            <StatCard title="Styles Discovered" value={summary_data.discoveredStyleCount} icon={<SparklesIcon />} bgColor="bg-yellow-100" textColor="text-yellow-600" />
+                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-10">
+                            {/* ... existing StatCards ... */}
+                            <StatCard title="Buildings Viewed" value={summary_data.totalSwipes || 0} icon={<BuildingIcon />} />
+                            <StatCard title="Right Swipes" value={summary_data.totalLikes || 0} icon={<HeartIconLucide />} />
+                            <StatCard title="Left Swipes" value={summary_data.totalDislikes || 0} icon={<XIcon />} bgColor="bg-red-100" textColor="text-red-600" />
+                            <StatCard title="Like Ratio" value={`${(summary_data.likeRatio || 0).toFixed(1)}%`} icon={<PercentIcon />} bgColor="bg-blue-100" textColor="text-blue-600" />
+                            <StatCard title="Styles Discovered" value={summary_data.discoveredStyleCount || 0} icon={<SparklesIcon />} bgColor="bg-yellow-100" textColor="text-yellow-600" />
+                            <StatCard 
+                              title="Avg. Decision Time" 
+                              value={formatMsToSeconds(summary_data.avg_swipe_time_ms)} 
+                              icon={<ClockIcon />} 
+                              bgColor="bg-indigo-100" 
+                              textColor="text-indigo-600"
+                              subtext="seconds"
+                            />
+                            <StatCard 
+                              title="Fastest Decision" 
+                              value={formatMsToSeconds(summary_data.min_swipe_time_ms)} 
+                              icon={<FastForwardIcon />} 
+                              bgColor="bg-green-100" 
+                              textColor="text-green-600"
+                              subtext="seconds"
+                            />
+                            <StatCard 
+                              title="Slowest Decision" 
+                              value={formatMsToSeconds(summary_data.max_swipe_time_ms)} 
+                              icon={<RewindIcon />} 
+                              bgColor="bg-orange-100" 
+                              textColor="text-orange-600"
+                              subtext="seconds"
+                            />
                          </div>
 
-                         {/* Top Liked & Disliked Styles Section */}
+                        {/* NEW SECTION: Architectural DNA / Style Like Ratios */}
+                        <div className="mb-10">
+                            <h3 className="font-semibold text-slate-700 mb-4 text-lg flex items-center">
+                                <DnaIcon size={20} className="mr-2 text-pink-600" />
+                                Your Architectural DNA (Style Affinities)
+                            </h3>
+                            {sortedStyleRatios.length > 0 ? (
+                                <div className="space-y-3">
+                                {sortedStyleRatios.map(style => (
+                                    <div key={style.styleName} className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="font-medium text-slate-800 text-md">{style.styleName}</span>
+                                            <span className={`font-semibold text-lg ${style.likeRatio >= 70 ? 'text-green-600' : style.likeRatio >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                            {style.likeRatio.toFixed(1)}% Liked
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                                            <div 
+                                                className="bg-pink-500 h-2.5 rounded-full" 
+                                                style={{ width: `${style.likeRatio}%` }}
+                                                title={`${style.likeRatio.toFixed(1)}%`}
+                                            ></div>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1.5">
+                                            You liked {style.totalLikedInStyle} out of {style.totalSeenInStyle} {style.styleName.toLowerCase()} buildings seen.
+                                        </p>
+                                    </div>
+                                ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-500 italic text-sm bg-white p-4 rounded-lg shadow-sm border">
+                                No style interaction data yet. Keep swiping to build your Architectural DNA!
+                                </p>
+                            )}
+                        </div>
+
+
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-10">
+                           {/* ... Top Liked & Disliked Styles ... */}
                            <div>
                              <h3 className="font-semibold text-slate-700 mb-3 text-lg">Your Top Liked Styles</h3>
-                             {summary_data.topLikedStyles.length > 0 ? (
+                             {(summary_data.topLikedStyles || []).length > 0 ? (
                                <ul className="space-y-2.5">
                                  {summary_data.topLikedStyles.map(style => (
                                    <li key={`liked-${style.name}`} className="bg-white rounded-lg p-3.5 flex justify-between items-center shadow-sm border border-gray-200 hover:border-pink-300 transition-colors">
@@ -519,7 +607,7 @@ export default function ProfilePage() {
                            </div>
                            <div>
                              <h3 className="font-semibold text-slate-700 mb-3 text-lg">Your Top Passed Styles</h3>
-                             {summary_data.topDislikedStyles.length > 0 ? (
+                             {(summary_data.topDislikedStyles || []).length > 0 ? (
                                <ul className="space-y-2.5">
                                  {summary_data.topDislikedStyles.map(style => (
                                    <li key={`disliked-${style.name}`} className="bg-white rounded-lg p-3.5 flex justify-between items-center shadow-sm border border-gray-200 hover:border-red-300 transition-colors">
@@ -532,9 +620,9 @@ export default function ProfilePage() {
                            </div>
                          </div>
 
-                         {/* Recent Activity Section */}
                          <h3 className="font-semibold text-slate-700 mb-4 text-lg">Recent Activity</h3>
-                         {summary_data.recentActivity.length > 0 ? (
+                         {/* ... Recent Activity content ... */}
+                           {(summary_data.recentActivity || []).length > 0 ? (
                            <div className="space-y-3">
                              {summary_data.recentActivity.map(activity => (
                                <div key={activity.id} className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm flex items-center space-x-4 hover:shadow-md transition-shadow">
@@ -557,8 +645,10 @@ export default function ProfilePage() {
                            </div>
                          ) : ( <p className="text-gray-500 italic text-sm bg-white p-4 rounded-lg shadow-sm border">No recent activity to show.</p> )}
 
+
                          <div className="flex justify-center mt-10">
-                             <Link href="/swipe" className="inline-flex items-center px-6 py-3 bg-pink-600 text-white rounded-full hover:bg-pink-700 font-semibold shadow-lg transition duration-200 transform hover:scale-105 text-base">
+                           {/* ... Continue Swiping button ... */}
+                            <Link href="/swipe" className="inline-flex items-center px-6 py-3 bg-pink-600 text-white rounded-full hover:bg-pink-700 font-semibold shadow-lg transition duration-200 transform hover:scale-105 text-base">
                                  <span>Continue Swiping</span>
                                  <ChevronRightIcon size={20} className="ml-1.5" />
                              </Link>
@@ -575,7 +665,8 @@ export default function ProfilePage() {
        </section>
 
        <footer className="py-12 bg-slate-900 text-slate-400 relative z-10 mt-12">
-         <div className="container mx-auto px-4 text-center">
+         {/* ... footer content ... */}
+          <div className="container mx-auto px-4 text-center">
            <div className="text-3xl font-bold text-[rgb(var(--primary-rgb))] mb-4">ArchiSwipe</div>
            <p className="mb-2">© {new Date().getFullYear()} ArchiSwipe - Building dreams, one swipe at a time.</p>
            <p className="text-sm mb-6">Warning: May cause an incurable passion for architecture.</p>
